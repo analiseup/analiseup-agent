@@ -28,14 +28,14 @@ SHOPEE_BASE_URL     = "https://partner.shopeemobile.com"
 
 # Clientes — shop_id preenchido após autorização OAuth de cada loja
 CLIENTES = {
-    "rosaliz":         {"monday_id": 12147461757, "shop_id": None},
-    "almavoga":        {"monday_id": 12147446749, "shop_id": None},
-    "aorbe":           {"monday_id": 12147461816, "shop_id": None},
+    "rosaliz":         {"monday_id": 12147461757, "shop_id": 1475997326},
+    "almavoga":        {"monday_id": 12147446749, "shop_id": 1230039734},
+    "aorbe":           {"monday_id": 12147461816, "shop_id": 1706475653},
     "neblina":         {"monday_id": 12147461765, "shop_id": None},
     "juninho":         {"monday_id": 12147461817, "shop_id": None},
     "donizete":        {"monday_id": 12147461632, "shop_id": None},
-    "kboutique":       {"monday_id": 12147461818, "shop_id": None},
-    "marcos_republik": {"monday_id": 12147461766, "shop_id": None},
+    "kboutique":       {"monday_id": 12147461818, "shop_id": 1141347861},
+    "marcos_republik": {"monday_id": 12147461766, "shop_id": 1614778372},
     "cristiano_joias": {"monday_id": 12147520757, "shop_id": None},
     "amigo_marlene":   {"monday_id": 12182372218, "shop_id": None},
     # Loja de teste (B_CLOUSET)
@@ -352,8 +352,8 @@ def main():
 
     resultados = {}
     for nome, cfg in CLIENTES.items():
-        shop_id = cfg.get("shop_id")
         token_data = tokens.get(nome, {})
+        shop_id = cfg.get("shop_id") or token_data.get("shop_id")
         access_token = token_data.get("access_token")
         refresh_token = token_data.get("refresh_token")
 
