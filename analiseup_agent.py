@@ -20,13 +20,13 @@ from datetime import datetime, timedelta
 
 # ─── CONFIGURAÇÕES (via env vars) ────────────────────────────
 SHOPEE_PARTNER_ID   = int(os.environ.get("SHOPEE_PARTNER_ID", "2036153"))
-SHOPEE_PARTNER_KEY  = os.environ.get("SHOPEE_PARTNER_KEY", "shpk716d4e664d5272536859716b4e7a657a6b7a7570454e4863774f76465259")
+SHOPEE_PARTNER_KEY  = os.environ.get("SHOPEE_PARTNER_KEY", "")  # definir via env (Railway) ou rodar_local.sh
 ANTHROPIC_API_KEY   = os.environ.get("ANTHROPIC_API_KEY", "")
 MONDAY_API_KEY      = os.environ.get("MONDAY_API_KEY", "")
 MONDAY_BOARD_ID     = int(os.environ.get("MONDAY_BOARD_ID", "9943771778"))
 SHOPEE_BASE_URL     = "https://partner.shopeemobile.com"
 RAILWAY_URL         = os.environ.get("RAILWAY_URL", "https://analiseup.com.br")
-CLAUDIN_API_SECRET  = os.environ.get("CLAUDIN_API_SECRET", "claudin_e81397de1ada206a4afb5f0155eafe9b40adf019")
+CLAUDIN_API_SECRET  = os.environ.get("CLAUDIN_API_SECRET", "")  # definir via env (Railway) ou rodar_local.sh
 
 # Board ANALISEUP — métricas de performance (ROAS, pedidos, situação)
 ANALISEUP_BOARD_ID  = int(os.environ.get("ANALISEUP_BOARD_ID", "18394145812"))
@@ -766,7 +766,7 @@ Responda SOMENTE com JSON válido, sem markdown:
 
     msg = client.messages.create(
         model="claude-haiku-4-5-20251001",
-        max_tokens=1024,
+        max_tokens=2500,  # 1024 truncava o JSON com o bloco de Ads e quebrava o parse
         messages=[{"role": "user", "content": prompt}],
     )
 
@@ -1154,9 +1154,13 @@ def main():
                 access_token = novo["access_token"]
                 salvar_tokens(nome, shop_id, access_token, novo.get("refresh_token", refresh_token))
 
-        result = analisar_loja(nome, shop_id, access_token, cfg.get("monday_id"))
-        if result:
-            resultados[nome] = result
+        # Uma loja com erro não pode derrubar a análise das demais
+        try:
+            result = analisar_loja(nome, shop_id, access_token, cfg.get("monday_id"))
+            if result:
+                resultados[nome] = result
+        except Exception as e:
+            print(f"  ❌ Erro ao analisar {nome}: {e} — seguindo para a próxima loja")
 
     if not resultados:
         print("\n⚠️  Nenhuma loja com token configurado.")
