@@ -2,11 +2,10 @@
 builder = "nixpacks"
 
 [deploy]
-# Roda o agente uma vez ao iniciar (para testes manuais)
-# O cron abaixo cuida da execução diária automática
 startCommand = "python analiseup_agent.py"
-
-[[crons]]
-# Todos os dias às 07:00 horário de Brasília (= 10:00 UTC)
-schedule = "0 10 * * *"
-command = "python analiseup_agent.py"
+# Cron do Railway: roda o startCommand todos os dias às 07:00 de Brasília (= 10:00 UTC).
+# O script roda a análise de todas as lojas e termina — o serviço dorme até o próximo disparo.
+cronSchedule = "0 10 * * *"
+# Não reiniciar ao terminar (essencial para serviços cron — sem isso o Railway
+# reexecutaria o script em loop)
+restartPolicyType = "never"
