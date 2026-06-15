@@ -1002,6 +1002,35 @@ def enviar_arquivo_analiseup(item_id, nome, conteudo_txt):
 
 # ─── ANÁLISE PRINCIPAL ────────────────────────────────────────
 
+def enviar_analise_site(shop_id, nome, metricas, diagnostico, produtos, saude, pedidos30, ads):
+    """
+    Envia a análise completa para o site (analiseup.com.br/api/salvar_analise.php),
+    para aparecer na aba 'Minhas Análises' do cliente. Autenticado por CLAUDIN_API_SECRET.
+    """
+    if not shop_id:
+        return
+    payload = {
+        "shop_id": int(shop_id),
+        "nome": nome.replace("_", " ").title(),
+        "gerado_em": datetime.now().strftime("%d/%m/%Y %H:%M"),
+        "metricas": metricas,
+        "diagnostico": diagnostico,
+        "produtos": produtos,
+        "saude": saude,
+        "pedidos30": pedidos30,
+        "ads": ads,
+    }
+    try:
+        url = f"{RAILWAY_URL}/api/salvar_analise.php?key={CLAUDIN_API_SECRET}"
+        r = requests.post(url, json=payload, timeout=20)
+        if r.status_code == 200:
+            print("  → Análise enviada ao site ✓")
+        else:
+            print(f"  ⚠️  Falha ao enviar análise ao site: {r.status_code} {r.text[:120]}")
+    except Exception as e:
+        print(f"  ⚠️  Erro ao enviar análise ao site: {e}")
+
+
 def analisar_loja(nome, shop_id, access_token, monday_id=None):
     print(f"\n{'='*50}")
     print(f"📊 Analisando: {nome.upper()}")
@@ -1104,6 +1133,10 @@ def analisar_loja(nome, shop_id, access_token, monday_id=None):
             enviar_arquivo_analiseup(analiseup_id, nome, relatorio)
         except Exception as e:
             print(f"  ⚠️  Erro ao gerar/enviar relatório: {e}")
+
+    # Envia a análise para o site (aba "Minhas Análises")
+    print("\n  → Enviando análise para o site...")
+    enviar_analise_site(shop_id, nome, metricas, diagnostico, produtos, saude, pedidos30, ads)
 
     return {
         "metricas": metricas,
