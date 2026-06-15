@@ -1002,7 +1002,90 @@ def enviar_arquivo_analiseup(item_id, nome, conteudo_txt):
 
 # ─── ANÁLISE PRINCIPAL ────────────────────────────────────────
 
-def enviar_analise_site(shop_id, nome, metricas, diagnostico, produtos, saude, pedidos30, ads):
+def analisar_produtos_vendas(details, top_n=5):
+    """
+    Ranking de produtos que mais vendem, agregado a partir do item_list dos
+    pedidos PAGOS já buscados (sem chamada extra à API).
+    """
+    PAGOS = {"READY_TO_SHIP", "PROCESSED", "SHIPPED", "TO_CONFIRM_RECEIVE", "COMPLETED", "IN_CANCEL"}
+    prod = {}
+    for o in details:
+        if o.get("order_status", "") not in PAGOS:
+            continue
+        for it in (o.get("item_list") or []):
+            nome = it.get("item_name") or "?"
+            qtd = int(it.get("model_quantity_purchased") or it.get("quantity_purchased") or 0)
+            preco = float(
+                it.get("model_discounted_price")
+                or it.get("discounted_price")
+                or it.get("model_original_price")
+                or 0
+            )
+            p = prod.setdefault(nome, {"nome": nome[:80], "qtd": 0, "faturamento": 0.0, "pedidos": 0})
+            p["qtd"] += qtd
+            p["faturamento"] += preco * qtd
+            p["pedidos"] += 1
+    lista = sorted(prod.values(), key=lambda x: x["faturamento"], reverse=True)
+    for p in lista:
+        p["faturamento"] = round(p["faturamento"], 2)
+    return {"top": lista[:top_n], "total_skus_vendidos": len(lista)}
+
+
+def otimizar_ads(ads):
+    """
+    Gera recomendações práticas por campanha (escalar / pausar / baixar target /
+    auditar página / recarregar) a partir dos dados de Ads já coletados.
+    """
+    if not ads or not ads.get("campanhas"):
+        return None
+    recs = []
+    budget_perdedoras = 0.0
+    vencedoras = []
+    for c in ads["campanhas"]:
+        if c.get("status") != "ongoing":
+            continue
+        nome = (c.get("nome") or "?")[:80]
+        roas = c.get("roas_7d")
+        gasto = c.get("gasto_7d") or 0
+        pedidos = c.get("pedidos_7d") or 0
+        ctr = c.get("ctr_7d") or 0
+        target = c.get("roas_target")
+        budget = c.get("budget_diario") or 0
+
+        if gasto >= 3 and (roas is None or roas < 1) and pedidos == 0:
+            if ctr and ctr >= 1:
+                recs.append({"campanha": nome, "acao": "AUDITAR PÁGINA",
+                             "motivo": f"CTR {ctr}% (gera clique) mas 0 venda com R${gasto:.2f} gastos — problema na página do produto (preço, fotos, avaliações ou estoque)."})
+            else:
+                recs.append({"campanha": nome, "acao": "PAUSAR",
+                             "motivo": f"R${gasto:.2f} em 7d com ROAS {roas or 0}x e 0 pedidos — queimando verba."})
+            budget_perdedoras += budget
+        elif roas and roas >= 8:
+            extra = ""
+            if target and roas < target * 0.6:
+                extra = f" O target {target}x está alto e limitando a entrega — baixar para ~{max(3, round(roas*0.8))}x."
+            recs.append({"campanha": nome, "acao": "ESCALAR",
+                         "motivo": f"ROAS {roas}x com só R${gasto:.2f} de gasto — aumentar o budget.{extra}"})
+            vencedoras.append(nome)
+        elif target and roas and roas >= 3 and roas < target * 0.6:
+            recs.append({"campanha": nome, "acao": "BAIXAR TARGET",
+                         "motivo": f"ROAS {roas}x é bom, mas o target {target}x está estrangulando a veiculação — baixar para ~{max(3, round(roas*0.8))}x."})
+
+    if ads.get("saldo") is not None and ads["saldo"] <= 0:
+        recs.insert(0, {"campanha": "—", "acao": "RECARREGAR",
+                        "motivo": f"Saldo de Ads zerado (R${ads['saldo']}) — recarregar para não parar a veiculação."})
+
+    if budget_perdedoras > 0 and vencedoras:
+        resumo = f"Pausar/auditar as campanhas sem retorno e remanejar até ~R${budget_perdedoras:.0f}/dia para as vencedoras ({', '.join(vencedoras[:2])})."
+    elif vencedoras:
+        resumo = f"Aumentar o budget das campanhas vencedoras: {', '.join(vencedoras[:2])}."
+    else:
+        resumo = ""
+    return {"recomendacoes": recs, "resumo": resumo}
+
+
+def enviar_analise_site(shop_id, nome, metricas, diagnostico, produtos, saude, pedidos30, ads,
+                        produtos_vendas=None, ads_otim=None):
     """
     Envia a análise completa para o site (analiseup.com.br/api/salvar_analise.php),
     para aparecer na aba 'Minhas Análises' do cliente. Autenticado por CLAUDIN_API_SECRET.
@@ -1016,9 +1099,11 @@ def enviar_analise_site(shop_id, nome, metricas, diagnostico, produtos, saude, p
         "metricas": metricas,
         "diagnostico": diagnostico,
         "produtos": produtos,
+        "produtos_vendas": produtos_vendas,
         "saude": saude,
         "pedidos30": pedidos30,
         "ads": ads,
+        "ads_otimizacao": ads_otim,
     }
     try:
         url = f"{RAILWAY_URL}/api/salvar_analise.php?key={CLAUDIN_API_SECRET}"
@@ -1134,17 +1219,37 @@ def analisar_loja(nome, shop_id, access_token, monday_id=None):
         except Exception as e:
             print(f"  ⚠️  Erro ao gerar/enviar relatório: {e}")
 
+    # Produtos que mais vendem (do item_list dos pedidos) e otimização de Ads
+    try:
+        produtos_vendas = analisar_produtos_vendas(details)
+        if produtos_vendas["top"]:
+            top1 = produtos_vendas["top"][0]
+            print(f"  → Top produto: {top1['nome'][:40]} — {top1['qtd']} un. | R${top1['faturamento']:.2f}")
+    except Exception as e:
+        print(f"  ⚠️  Erro ao ranquear produtos: {e}")
+        produtos_vendas = None
+    try:
+        ads_otim = otimizar_ads(ads)
+        if ads_otim:
+            print(f"  → Otimização de Ads: {len(ads_otim['recomendacoes'])} recomendação(ões)")
+    except Exception as e:
+        print(f"  ⚠️  Erro ao otimizar Ads: {e}")
+        ads_otim = None
+
     # Envia a análise para o site (aba "Minhas Análises")
     print("\n  → Enviando análise para o site...")
-    enviar_analise_site(shop_id, nome, metricas, diagnostico, produtos, saude, pedidos30, ads)
+    enviar_analise_site(shop_id, nome, metricas, diagnostico, produtos, saude, pedidos30, ads,
+                        produtos_vendas, ads_otim)
 
     return {
         "metricas": metricas,
         "diagnostico": diagnostico,
         "produtos": produtos,
+        "produtos_vendas": produtos_vendas,
         "saude": saude,
         "pedidos30": pedidos30,
         "ads": ads,
+        "ads_otimizacao": ads_otim,
     }
 
 
