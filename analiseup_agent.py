@@ -43,6 +43,7 @@ CLIENTES = {
     "marcos_republik": {"monday_id": 12147461766, "shop_id": 1614778372},
     "cristiano_joias": {"monday_id": 12147520757, "shop_id": None},
     "amigo_marlene":   {"monday_id": 12182372218, "shop_id": None},
+  "gabriel": {"monday_id": None, "shop_id": 432122356},
     # Loja de teste (B_CLOUSET)
     "b_clouset":       {"monday_id": None, "shop_id": 678623539},
 }
@@ -54,6 +55,7 @@ ANALISEUP_IDS = {
     "marcos_republik": 12247943762,
     "rosaliz":         12247980019,
     "kboutique":       12247941641,
+  "gabriel": 12312803890,
 }
 
 # ─── TOKENS ──────────────────────────────────────────────────
